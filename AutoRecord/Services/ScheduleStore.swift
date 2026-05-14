@@ -7,10 +7,19 @@ final class ScheduleStore: ObservableObject {
     @Published private(set) var schedules: [Schedule] = []
 
     private let storage: ScheduleStorage
+    private var watcherSource: DispatchSourceFileSystemObject?
+    private var watcherFD: Int32 = -1
+    private var suppressNextWatcherEvent = false
 
     init(storage: ScheduleStorage = ScheduleStorage()) {
         self.storage = storage
         reload()
+        startWatcher()
+    }
+
+    deinit {
+        watcherSource?.cancel()
+        if watcherFD >= 0 { close(watcherFD) }
     }
 
     func add(_ schedule: Schedule) {
@@ -43,7 +52,6 @@ final class ScheduleStore: ObservableObject {
         schedules.first { $0.status(now: now) == .active }
     }
 
-    /// Reload from disk. Called on init and (in Task 5) from the file watcher.
     func reload() {
         do {
             self.schedules = try storage.read()
@@ -55,10 +63,56 @@ final class ScheduleStore: ObservableObject {
     private func persist(_ next: [Schedule]) {
         let sorted = next.sorted { $0.start < $1.start }
         self.schedules = sorted
+        suppressNextWatcherEvent = true
         do {
             try storage.write(sorted)
         } catch {
+            suppressNextWatcherEvent = false
             NSLog("ScheduleStore: failed to save schedules: \(error)")
         }
+    }
+
+    // MARK: - File watcher
+
+    private func startWatcher() {
+        let path = storage.fileURL.path
+        // Ensure the file exists so we have something to watch.
+        if !FileManager.default.fileExists(atPath: path) {
+            FileManager.default.createFile(atPath: path, contents: Data("[]".utf8))
+        }
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else {
+            NSLog("ScheduleStore: failed to open \(path) for watching, errno \(errno)")
+            return
+        }
+        watcherFD = fd
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete],
+            queue: .main
+        )
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            if self.suppressNextWatcherEvent {
+                self.suppressNextWatcherEvent = false
+                return
+            }
+            // If the file was renamed/deleted (atomic write replaces the inode),
+            // reopen the watcher on the new path after reloading.
+            let flags = src.data
+            self.reload()
+            if flags.contains(.rename) || flags.contains(.delete) {
+                src.cancel()
+                close(self.watcherFD)
+                self.watcherFD = -1
+                self.startWatcher()
+            }
+        }
+        src.setCancelHandler { [weak self] in
+            // fd already closed in event handler or deinit
+            _ = self
+        }
+        src.resume()
+        watcherSource = src
     }
 }
