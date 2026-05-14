@@ -66,27 +66,37 @@ osascript <<APPLESCRIPT
 tell application "Finder"
     tell disk "$VOL_NAME"
         open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set the bounds of container window to {400, 200, 940, 580}
-        set theViewOptions to the icon view options of container window
+        delay 2
+        set theWindow to container window
+        set current view of theWindow to icon view
+        set toolbar visible of theWindow to false
+        set statusbar visible of theWindow to false
+        set the bounds of theWindow to {400, 200, 1146, 800}
+
+        set theViewOptions to the icon view options of theWindow
         set arrangement of theViewOptions to not arranged
-        set icon size of theViewOptions to 100
-        set text size of theViewOptions to 12
+        set icon size of theViewOptions to 165
         set background picture of theViewOptions to file ".background:background.png"
-        set position of item "AutoRecord.app" of container window to {160, 220}
-        set position of item "Applications" of container window to {400, 220}
+
+        set position of item "AutoRecord.app" of theWindow to {190, 320}
+        set position of item "Applications" of theWindow to {550, 320}
+
         update without registering applications
+        delay 2
+        close
         delay 1
+        open
+        delay 2
+        update without registering applications
+        delay 3
         close
     end tell
 end tell
 APPLESCRIPT
 
-# Make sure Finder's view options have been persisted to .DS_Store.
+# Give .DS_Store time to flush to disk before we detach.
 sync
-sleep 1
+sleep 5
 
 echo "==> Unmounting"
 hdiutil detach "$VOL_MOUNT" >/dev/null
