@@ -52,6 +52,8 @@ final class ScheduleStore: ObservableObject {
         schedules.first { $0.status(now: now) == .active }
     }
 
+    /// Reload from disk. Called on init, by the file watcher on external writes,
+    /// and after rearm on rename/delete.
     func reload() {
         do {
             self.schedules = try storage.read()
@@ -76,7 +78,11 @@ final class ScheduleStore: ObservableObject {
 
     private func startWatcher() {
         let path = storage.fileURL.path
-        // Ensure the file exists so we have something to watch.
+        // Ensure the parent directory and file exist so we have something to watch.
+        try? FileManager.default.createDirectory(
+            at: storage.fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: Data("[]".utf8))
         }
@@ -106,11 +112,9 @@ final class ScheduleStore: ObservableObject {
                 close(self.watcherFD)
                 self.watcherFD = -1
                 self.startWatcher()
+                // Re-read after rearm in case a write landed between cancel() and open().
+                self.reload()
             }
-        }
-        src.setCancelHandler { [weak self] in
-            // fd already closed in event handler or deinit
-            _ = self
         }
         src.resume()
         watcherSource = src
