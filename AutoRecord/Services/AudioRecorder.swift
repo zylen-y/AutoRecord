@@ -1,4 +1,5 @@
 import Foundation
+import AutoRecordShared
 import AVFoundation
 import AppKit
 import Combine

@@ -1,4 +1,5 @@
 import Foundation
+import AutoRecordShared
 import Combine
 
 @MainActor

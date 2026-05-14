@@ -16,12 +16,17 @@ settings:
     GENERATE_INFOPLIST_FILE: NO
     PRODUCT_NAME: AutoRecord
 
+packages:
+  AutoRecordShared:
+    path: Packages/AutoRecordShared
+
 targets:
   AutoRecord:
     type: application
     platform: macOS
     dependencies:
       - sdk: ScreenCaptureKit.framework
+      - package: AutoRecordShared
     sources:
       - path: AutoRecord
         excludes:
