@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var outputPath: String = ""
     @State private var quality: AudioQuality = .medium
     @State private var launchAtLogin: Bool = false
+    @State private var mcpStatus: MCPInstallService.InstallStatus = .notInstalled
+    @State private var mcpActionMessage: String?
 
     var body: some View {
         Form {
@@ -77,40 +79,83 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                let binaryPath = Bundle.main.resourceURL?
-                    .appendingPathComponent("autorecord-mcp").path
-                    ?? "(autorecord-mcp not found in app bundle)"
-
-                Text("Binary location:")
-                    .font(.subheadline).bold()
-                Text(binaryPath)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-
-                Text("Add to your Claude Desktop config:")
-                    .font(.subheadline).bold()
-                let snippet = """
-                {
-                  "mcpServers": {
-                    "autorecord": {
-                      "command": "\(binaryPath)"
-                    }
-                  }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(mcpStatusText)
+                        .foregroundColor(mcpStatusColor)
+                    Spacer()
+                    Button(mcpButtonTitle) { runMCPInstall() }
+                        .disabled(mcpButtonDisabled)
                 }
-                """
-                Text(snippet)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
 
-                Button("Copy snippet") {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString(snippet, forType: .string)
+                if case .installedStale(let existing) = mcpStatus {
+                    Text("Existing path:\n\(existing)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if let msg = mcpActionMessage {
+                    Text(msg)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                if mcpStatus != .claudeConfigMissing {
+                    Text("After install, fully quit and reopen Claude Desktop so it picks up the new server.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
+    }
+
+    private var mcpStatusText: String {
+        switch mcpStatus {
+        case .claudeConfigMissing:
+            return "Claude Desktop config not found — install Claude Desktop and launch it once first."
+        case .notInstalled:
+            return "Not registered with Claude Desktop."
+        case .installedCurrent:
+            return "Registered with Claude Desktop ✓"
+        case .installedStale:
+            return "Registered, but path is out of date — Claude will fail to start the server."
+        case .readError(let m):
+            return "Could not read config: \(m)"
+        }
+    }
+
+    private var mcpStatusColor: Color {
+        switch mcpStatus {
+        case .installedCurrent: return .secondary
+        case .installedStale, .readError: return .orange
+        case .claudeConfigMissing: return .secondary
+        case .notInstalled: return .primary
+        }
+    }
+
+    private var mcpButtonTitle: String {
+        switch mcpStatus {
+        case .installedCurrent: return "Reinstall"
+        case .installedStale: return "Update path"
+        default: return "Install for Claude Desktop"
+        }
+    }
+
+    private var mcpButtonDisabled: Bool {
+        if case .claudeConfigMissing = mcpStatus { return true }
+        return false
+    }
+
+    private func runMCPInstall() {
+        do {
+            try MCPInstallService.installOrUpdate()
+            mcpStatus = MCPInstallService.currentStatus()
+            mcpActionMessage = "Registered. Restart Claude Desktop to apply."
+        } catch {
+            mcpActionMessage = "Install failed: \(error)"
+        }
     }
 
     private var screenRecordingStatusText: String {
@@ -132,6 +177,7 @@ struct SettingsView: View {
         outputPath = recorder.outputDirectory.path
         quality = recorder.audioQuality
         launchAtLogin = LoginItemService.isEnabled
+        mcpStatus = MCPInstallService.currentStatus()
     }
 
     private func chooseFolder() {
