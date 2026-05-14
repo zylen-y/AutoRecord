@@ -1,0 +1,20 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+
+# Local distribution artifacts (ship via GitHub Releases instead)
+dist/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# User
+*.xcuserstate
+xcuserdata/

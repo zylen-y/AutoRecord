@@ -1,0 +1,52 @@
+name: AutoRecord
+options:
+  bundleIdPrefix: com.autorecord
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: YES
+    GENERATE_INFOPLIST_FILE: NO
+    PRODUCT_NAME: AutoRecord
+
+targets:
+  AutoRecord:
+    type: application
+    platform: macOS
+    sources:
+      - path: AutoRecord
+        excludes:
+          - "Resources/Info.plist"
+          - "AutoRecord.entitlements"
+    resources:
+      - path: AutoRecord/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.autorecord.AutoRecord
+        INFOPLIST_FILE: AutoRecord/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: AutoRecord/AutoRecord.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        ENABLE_APP_SANDBOX: NO
+        COMBINE_HIDPI_IMAGES: YES
+    info:
+      path: AutoRecord/Resources/Info.plist
+      properties:
+        LSUIElement: true
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSHighResolutionCapable: true
+        NSMicrophoneUsageDescription: "AutoRecord records audio during your scheduled meetings."
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+
+# AutoRecordTests target intentionally omitted from v1 due to a known
+# Xcode 26 + xcodegen + @testable import duplicate-output build quirk.
+# The test source files live in AutoRecordTests/ and can be added back
+# manually from Xcode when needed (File → New → Target → macOS Unit Testing Bundle).
