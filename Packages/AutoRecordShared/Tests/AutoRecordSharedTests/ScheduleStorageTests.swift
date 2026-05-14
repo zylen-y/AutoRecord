@@ -49,18 +49,42 @@ final class ScheduleStorageTests: XCTestCase {
     }
 
     func testConcurrentWritesAreSerialized() throws {
-        // Two ScheduleStorage instances on the same file: both should succeed,
-        // and the final state should contain a non-empty valid JSON document.
-        let storage2 = ScheduleStorage(fileURL: fileURL)
-        let a = Schedule(title: "A", start: Date(timeIntervalSince1970: 100), end: Date(timeIntervalSince1970: 200))
-        let b = Schedule(title: "B", start: Date(timeIntervalSince1970: 300), end: Date(timeIntervalSince1970: 400))
+        let writerCount = 50
+        let expectedTitles: Set<String> = Set((0..<writerCount).map { "Writer\($0)" })
         let q = DispatchQueue(label: "concurrent", attributes: .concurrent)
         let g = DispatchGroup()
-        q.async(group: g) { try? self.storage.write([a]) }
-        q.async(group: g) { try? storage2.write([b]) }
+        for i in 0..<writerCount {
+            let title = "Writer\(i)"
+            let storageN = ScheduleStorage(fileURL: fileURL)
+            q.async(group: g) {
+                let s = Schedule(
+                    title: title,
+                    start: Date(timeIntervalSince1970: TimeInterval(100 + i)),
+                    end: Date(timeIntervalSince1970: TimeInterval(200 + i))
+                )
+                try? storageN.write([s])
+            }
+        }
         g.wait()
+
+        // The on-disk file must decode (no torn writes) and contain exactly one
+        // schedule whose title comes from the expected set (no garbage entry, no
+        // mixed state). Which writer wins is OS-scheduling-dependent and not asserted.
         let final = try storage.read()
-        XCTAssertFalse(final.isEmpty)
+        XCTAssertEqual(final.count, 1, "Expected exactly one surviving schedule after 50 serialized last-writer-wins writes")
+        if let winner = final.first {
+            XCTAssertTrue(expectedTitles.contains(winner.title), "Surviving title \(winner.title) is not in the expected set")
+        }
+    }
+
+    func testReadOnCorruptFileThrowsDecodeFailure() throws {
+        // Write garbage bytes that are not valid JSON.
+        try Data("not-valid-json".utf8).write(to: fileURL)
+        XCTAssertThrowsError(try storage.read()) { error in
+            guard case ScheduleStorage.StorageError.decodeFailure = error else {
+                return XCTFail("Expected decodeFailure, got \(error)")
+            }
+        }
     }
 
     func testLockTimeoutThrowsLockTimeoutError() throws {
