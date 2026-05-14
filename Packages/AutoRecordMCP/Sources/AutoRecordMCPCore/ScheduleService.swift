@@ -24,16 +24,16 @@ public final class ScheduleService {
         guard endDate > startDate else {
             throw ToolError.validation("end must be strictly after start")
         }
-        let schedule = Schedule(title: trimmed, start: startDate, end: endDate)
+        // Truncate createdAt to whole-seconds so the returned value compares equal
+        // to the post-roundtrip value (ScheduleStorage's JSONEncoder.iso8601 strategy
+        // drops sub-second precision). Without this, callers using `==` on createdAt
+        // across an add/update boundary would fail.
+        let createdAt = Date(timeIntervalSince1970: trunc(Date().timeIntervalSince1970))
+        let schedule = Schedule(title: trimmed, start: startDate, end: endDate, createdAt: createdAt)
         var current = try readList()
         current.append(schedule)
         try writeList(current)
-        // Read back so returned value matches storage precision (ISO 8601 second-level).
-        let persisted = try readList()
-        guard let saved = persisted.first(where: { $0.id == schedule.id }) else {
-            throw ToolError.io("persisted schedule not found after write")
-        }
-        return saved
+        return schedule
     }
 
     public func update(id: String, title: String?, start: String?, end: String?) throws -> Schedule {
