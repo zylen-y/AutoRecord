@@ -39,7 +39,7 @@ struct AutoRecordApp: App {
 
     private var menuBarIcon: String {
         if recorder.isRecording { return "record.circle.fill" }
-        if PermissionService.current == .denied { return "mic.slash" }
+        if PermissionService.micStatus == .denied { return "mic.slash" }
         return "mic"
     }
 }
