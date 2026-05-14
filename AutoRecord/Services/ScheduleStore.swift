@@ -1,38 +1,43 @@
 import Foundation
 import Combine
+import AutoRecordShared
 
 @MainActor
 final class ScheduleStore: ObservableObject {
     @Published private(set) var schedules: [Schedule] = []
 
-    private let fileURL: URL
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
+    private let storage: ScheduleStorage
+    private var watcherSource: DispatchSourceFileSystemObject?
+    private var watcherFD: Int32 = -1
+    private var suppressNextWatcherEvent = false
 
-    init(fileURL: URL = AppPaths.schedulesFile) {
-        self.fileURL = fileURL
-        self.encoder = JSONEncoder()
-        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        self.encoder.dateEncodingStrategy = .iso8601
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
-        load()
+    init(storage: ScheduleStorage = ScheduleStorage()) {
+        self.storage = storage
+        reload()
+        startWatcher()
+    }
+
+    deinit {
+        watcherSource?.cancel()
+        if watcherFD >= 0 { close(watcherFD) }
     }
 
     func add(_ schedule: Schedule) {
-        schedules.append(schedule)
-        sortAndSave()
+        var next = schedules
+        next.append(schedule)
+        persist(next)
     }
 
     func update(_ schedule: Schedule) {
         guard let idx = schedules.firstIndex(where: { $0.id == schedule.id }) else { return }
-        schedules[idx] = schedule
-        sortAndSave()
+        var next = schedules
+        next[idx] = schedule
+        persist(next)
     }
 
     func delete(id: UUID) {
-        schedules.removeAll { $0.id == id }
-        save()
+        let next = schedules.filter { $0.id != id }
+        persist(next)
     }
 
     func schedule(id: UUID) -> Schedule? {
@@ -40,37 +45,83 @@ final class ScheduleStore: ObservableObject {
     }
 
     func nextUpcoming(now: Date = Date()) -> Schedule? {
-        schedules
-            .filter { $0.start > now }
-            .min(by: { $0.start < $1.start })
+        schedules.filter { $0.start > now }.min(by: { $0.start < $1.start })
     }
 
     func activeSchedule(now: Date = Date()) -> Schedule? {
         schedules.first { $0.status(now: now) == .active }
     }
 
-    private func sortAndSave() {
-        schedules.sort { $0.start < $1.start }
-        save()
-    }
-
-    private func load() {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+    /// Reload from disk. Called on init, by the file watcher on external writes,
+    /// and after rearm on rename/delete.
+    func reload() {
         do {
-            let data = try Data(contentsOf: fileURL)
-            let decoded = try decoder.decode([Schedule].self, from: data)
-            self.schedules = decoded.sorted { $0.start < $1.start }
+            self.schedules = try storage.read()
         } catch {
             NSLog("ScheduleStore: failed to load schedules: \(error)")
         }
     }
 
-    private func save() {
+    private func persist(_ next: [Schedule]) {
+        let sorted = next.sorted { $0.start < $1.start }
+        self.schedules = sorted
+        suppressNextWatcherEvent = true
         do {
-            let data = try encoder.encode(schedules)
-            try data.write(to: fileURL, options: .atomic)
+            try storage.write(sorted)
         } catch {
+            suppressNextWatcherEvent = false
             NSLog("ScheduleStore: failed to save schedules: \(error)")
         }
+    }
+
+    // MARK: - File watcher
+
+    private func startWatcher() {
+        let path = storage.fileURL.path
+        // Ensure the parent directory and file exist so we have something to watch.
+        try? FileManager.default.createDirectory(
+            at: storage.fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if !FileManager.default.fileExists(atPath: path) {
+            FileManager.default.createFile(atPath: path, contents: Data("[]".utf8))
+        }
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else {
+            NSLog("ScheduleStore: failed to open \(path) for watching, errno \(errno)")
+            return
+        }
+        watcherFD = fd
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete],
+            queue: .main
+        )
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            // Read both signals BEFORE the suppression branch — we must always
+            // rearm on rename/delete (the inode is unlinked), even on self-writes.
+            // Otherwise a single coalesced event consumed by the suppression flag
+            // would leave the watcher fd dangling on a vanished inode.
+            let flags = src.data
+            let suppressed = self.suppressNextWatcherEvent
+            self.suppressNextWatcherEvent = false
+
+            if !suppressed {
+                self.reload()
+            }
+            if flags.contains(.rename) || flags.contains(.delete) {
+                src.cancel()
+                close(self.watcherFD)
+                self.watcherFD = -1
+                self.startWatcher()
+                if !suppressed {
+                    // Re-read after rearm in case a write landed between cancel() and open().
+                    self.reload()
+                }
+            }
+        }
+        src.resume()
+        watcherSource = src
     }
 }

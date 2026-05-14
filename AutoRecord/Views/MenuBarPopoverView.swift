@@ -1,4 +1,5 @@
 import SwiftUI
+import AutoRecordShared
 
 struct MenuBarPopoverView: View {
     @EnvironmentObject var store: ScheduleStore

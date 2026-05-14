@@ -1,4 +1,5 @@
 import SwiftUI
+import AutoRecordShared
 
 struct ScheduleListView: View {
     @EnvironmentObject var store: ScheduleStore

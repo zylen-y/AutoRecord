@@ -1,4 +1,5 @@
 import SwiftUI
+import AutoRecordShared
 
 struct ScheduleEditorView: View {
     enum Mode {

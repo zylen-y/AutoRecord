@@ -71,6 +71,43 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
             }
+
+            Section("MCP for Claude") {
+                Text("Claude can manage your AutoRecord schedules through an MCP server bundled with the app.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                let binaryPath = Bundle.main.resourceURL?
+                    .appendingPathComponent("autorecord-mcp").path
+                    ?? "(autorecord-mcp not found in app bundle)"
+
+                Text("Binary location:")
+                    .font(.subheadline).bold()
+                Text(binaryPath)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+
+                Text("Add to your Claude Desktop config:")
+                    .font(.subheadline).bold()
+                let snippet = """
+                {
+                  "mcpServers": {
+                    "autorecord": {
+                      "command": "\(binaryPath)"
+                    }
+                  }
+                }
+                """
+                Text(snippet)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+
+                Button("Copy snippet") {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(snippet, forType: .string)
+                }
+            }
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
