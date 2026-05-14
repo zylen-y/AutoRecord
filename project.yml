@@ -20,6 +20,8 @@ targets:
   AutoRecord:
     type: application
     platform: macOS
+    dependencies:
+      - sdk: ScreenCaptureKit.framework
     sources:
       - path: AutoRecord
         excludes:
