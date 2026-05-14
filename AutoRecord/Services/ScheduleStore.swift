@@ -1,39 +1,34 @@
 import Foundation
-import AutoRecordShared
 import Combine
+import AutoRecordShared
 
 @MainActor
 final class ScheduleStore: ObservableObject {
     @Published private(set) var schedules: [Schedule] = []
 
-    private let fileURL: URL
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
+    private let storage: ScheduleStorage
 
-    init(fileURL: URL = AppPaths.schedulesFile) {
-        self.fileURL = fileURL
-        self.encoder = JSONEncoder()
-        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        self.encoder.dateEncodingStrategy = .iso8601
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
-        load()
+    init(storage: ScheduleStorage = ScheduleStorage()) {
+        self.storage = storage
+        reload()
     }
 
     func add(_ schedule: Schedule) {
-        schedules.append(schedule)
-        sortAndSave()
+        var next = schedules
+        next.append(schedule)
+        persist(next)
     }
 
     func update(_ schedule: Schedule) {
         guard let idx = schedules.firstIndex(where: { $0.id == schedule.id }) else { return }
-        schedules[idx] = schedule
-        sortAndSave()
+        var next = schedules
+        next[idx] = schedule
+        persist(next)
     }
 
     func delete(id: UUID) {
-        schedules.removeAll { $0.id == id }
-        save()
+        let next = schedules.filter { $0.id != id }
+        persist(next)
     }
 
     func schedule(id: UUID) -> Schedule? {
@@ -41,35 +36,27 @@ final class ScheduleStore: ObservableObject {
     }
 
     func nextUpcoming(now: Date = Date()) -> Schedule? {
-        schedules
-            .filter { $0.start > now }
-            .min(by: { $0.start < $1.start })
+        schedules.filter { $0.start > now }.min(by: { $0.start < $1.start })
     }
 
     func activeSchedule(now: Date = Date()) -> Schedule? {
         schedules.first { $0.status(now: now) == .active }
     }
 
-    private func sortAndSave() {
-        schedules.sort { $0.start < $1.start }
-        save()
-    }
-
-    private func load() {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+    /// Reload from disk. Called on init and (in Task 5) from the file watcher.
+    func reload() {
         do {
-            let data = try Data(contentsOf: fileURL)
-            let decoded = try decoder.decode([Schedule].self, from: data)
-            self.schedules = decoded.sorted { $0.start < $1.start }
+            self.schedules = try storage.read()
         } catch {
             NSLog("ScheduleStore: failed to load schedules: \(error)")
         }
     }
 
-    private func save() {
+    private func persist(_ next: [Schedule]) {
+        let sorted = next.sorted { $0.start < $1.start }
+        self.schedules = sorted
         do {
-            let data = try encoder.encode(schedules)
-            try data.write(to: fileURL, options: .atomic)
+            try storage.write(sorted)
         } catch {
             NSLog("ScheduleStore: failed to save schedules: \(error)")
         }
