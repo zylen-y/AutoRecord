@@ -19,6 +19,8 @@ settings:
 packages:
   AutoRecordShared:
     path: Packages/AutoRecordShared
+  AutoRecordMCP:
+    path: Packages/AutoRecordMCP
 
 targets:
   AutoRecord:
@@ -52,6 +54,17 @@ targets:
         NSMicrophoneUsageDescription: "AutoRecord records audio during your scheduled meetings."
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
+    preBuildScripts:
+      - name: "Build autorecord-mcp"
+        script: |
+          set -euo pipefail
+          cd "${PROJECT_DIR}/Packages/AutoRecordMCP"
+          swift build -c release --product autorecord-mcp
+          DEST="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources"
+          mkdir -p "$DEST"
+          cp ".build/release/autorecord-mcp" "$DEST/autorecord-mcp"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/autorecord-mcp"
 
 # AutoRecordTests target intentionally omitted from v1 due to a known
 # Xcode 26 + xcodegen + @testable import duplicate-output build quirk.
