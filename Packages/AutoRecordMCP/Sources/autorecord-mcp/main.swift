@@ -35,13 +35,13 @@ struct AutoRecordMCPMain {
                     isError: false
                 )
             } catch let err as ToolError {
-                let body = #"{"code":"\#(err.code)","message":"\#(escape(err.message))"}"#
+                let body = errorJSON(code: err.code, message: err.message)
                 return CallTool.Result(
                     content: [.text(text: body, annotations: nil, _meta: nil)],
                     isError: true
                 )
             } catch {
-                let body = #"{"code":"io_error","message":"\#(escape(String(describing: error)))"}"#
+                let body = errorJSON(code: "io_error", message: String(describing: error))
                 return CallTool.Result(
                     content: [.text(text: body, annotations: nil, _meta: nil)],
                     isError: true
@@ -78,6 +78,11 @@ private func valueToAny(_ v: Value) -> Any {
     if let i = v.intValue { return i }
     if let d = v.doubleValue { return d }
     if let b = v.boolValue { return b }
+    if let (mime, data) = v.dataValue {
+        // Preserve binary payload as a sub-dictionary so tools can decide how to use it.
+        // The MCP wire format encodes Data as base64; we surface the bytes plus mime type.
+        return ["mimeType": (mime ?? "application/octet-stream") as Any, "data": data]
+    }
     if let arr = v.arrayValue { return arr.map(valueToAny) }
     if let obj = v.objectValue {
         var d: [String: Any] = [:]
@@ -103,8 +108,12 @@ private func jsonToValue(_ any: Any) -> Value {
     return .null
 }
 
-private func escape(_ s: String) -> String {
-    s.replacingOccurrences(of: "\\", with: "\\\\")
-     .replacingOccurrences(of: "\"", with: "\\\"")
-     .replacingOccurrences(of: "\n", with: "\\n")
+private func errorJSON(code: String, message: String) -> String {
+    let payload: [String: String] = ["code": code, "message": message]
+    if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+       let s = String(data: data, encoding: .utf8) {
+        return s
+    }
+    // Fallback if somehow the message isn't JSON-encodable (shouldn't happen for Strings).
+    return #"{"code":"\#(code)","message":"unserializable"}"#
 }
