@@ -2,7 +2,11 @@ import Foundation
 import AutoRecordShared
 
 public final class Tools {
-    public struct Descriptor: Sendable {
+    /// Tool descriptor. `[String: Any]` for the schema is not statically `Sendable`,
+    /// but descriptors are constructed inside this actor-free type and serialised on
+    /// the wire by the SDK before crossing actor boundaries, so the runtime guarantee
+    /// holds. Marked `@unchecked Sendable` to silence strict-concurrency warnings.
+    public struct Descriptor: @unchecked Sendable {
         public let name: String
         public let description: String
         public let inputSchema: [String: Any]

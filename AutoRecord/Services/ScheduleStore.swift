@@ -99,21 +99,26 @@ final class ScheduleStore: ObservableObject {
         )
         src.setEventHandler { [weak self] in
             guard let self else { return }
-            if self.suppressNextWatcherEvent {
-                self.suppressNextWatcherEvent = false
-                return
-            }
-            // If the file was renamed/deleted (atomic write replaces the inode),
-            // reopen the watcher on the new path after reloading.
+            // Read both signals BEFORE the suppression branch — we must always
+            // rearm on rename/delete (the inode is unlinked), even on self-writes.
+            // Otherwise a single coalesced event consumed by the suppression flag
+            // would leave the watcher fd dangling on a vanished inode.
             let flags = src.data
-            self.reload()
+            let suppressed = self.suppressNextWatcherEvent
+            self.suppressNextWatcherEvent = false
+
+            if !suppressed {
+                self.reload()
+            }
             if flags.contains(.rename) || flags.contains(.delete) {
                 src.cancel()
                 close(self.watcherFD)
                 self.watcherFD = -1
                 self.startWatcher()
-                // Re-read after rearm in case a write landed between cancel() and open().
-                self.reload()
+                if !suppressed {
+                    // Re-read after rearm in case a write landed between cancel() and open().
+                    self.reload()
+                }
             }
         }
         src.resume()
