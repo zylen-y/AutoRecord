@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build a Release AutoRecord.app and package it into a DMG that contains
-# the app + an alias to /Applications + a README explaining the unsigned-app
-# Gatekeeper caveat. Run from the repo root.
+# Build a Release AutoRecord.app and package it into a polished DMG with a
+# custom background image, an /Applications drop-target alias, and a Finder
+# layout that opens to the same window every time.
 #
 # Output: dist/AutoRecord.dmg
 
@@ -11,55 +11,91 @@ cd "$(dirname "$0")/.."
 
 REPO_ROOT="$(pwd)"
 DIST="$REPO_ROOT/dist"
-STAGE="$DIST/dmg-stage"
 ARCHIVE="$DIST/AutoRecord.xcarchive"
+DMG_RW="$DIST/AutoRecord-rw.dmg"
 DMG_PATH="$DIST/AutoRecord.dmg"
 VOL_NAME="AutoRecord"
+VOL_MOUNT="/Volumes/$VOL_NAME"
+BACKGROUND_SRC="$REPO_ROOT/scripts/dmg-background.png"
 
 echo "==> Regenerating Xcode project"
 xcodegen generate >/dev/null
 
 echo "==> Cleaning previous outputs"
-rm -rf "$STAGE" "$ARCHIVE" "$DMG_PATH"
-mkdir -p "$STAGE"
+rm -rf "$ARCHIVE" "$DMG_RW" "$DMG_PATH"
+mkdir -p "$DIST"
 
-echo "==> Archiving Release build (this also runs the preBuildScript that embeds autorecord-mcp)"
+echo "==> Archiving Release build (preBuildScript embeds autorecord-mcp)"
 xcodebuild \
   -project AutoRecord.xcodeproj \
   -scheme AutoRecord \
   -configuration Release \
   -archivePath "$ARCHIVE" \
-  archive
+  archive >/dev/null
 
 APP_IN_ARCHIVE="$ARCHIVE/Products/Applications/AutoRecord.app"
-if [ ! -d "$APP_IN_ARCHIVE" ]; then
-  echo "ERROR: AutoRecord.app not found inside archive at $APP_IN_ARCHIVE" >&2
+[ -d "$APP_IN_ARCHIVE" ] || { echo "ERROR: missing $APP_IN_ARCHIVE" >&2; exit 1; }
+[ -x "$APP_IN_ARCHIVE/Contents/Resources/autorecord-mcp" ] || {
+  echo "ERROR: autorecord-mcp not embedded" >&2
   exit 1
+}
+
+echo "==> Creating writable DMG"
+# Already unmounted from a prior run?
+if [ -d "$VOL_MOUNT" ]; then
+  hdiutil detach "$VOL_MOUNT" -force >/dev/null 2>&1 || true
 fi
-
-echo "==> Verifying embedded MCP binary is present"
-MCP_IN_APP="$APP_IN_ARCHIVE/Contents/Resources/autorecord-mcp"
-if [ ! -x "$MCP_IN_APP" ]; then
-  echo "ERROR: autorecord-mcp not embedded at $MCP_IN_APP" >&2
-  exit 1
-fi
-file "$MCP_IN_APP"
-
-echo "==> Staging DMG contents"
-cp -R "$APP_IN_ARCHIVE" "$STAGE/AutoRecord.app"
-ln -s /Applications "$STAGE/Applications"
-cp scripts/dmg-README.txt "$STAGE/README.txt"
-
-echo "==> Creating DMG"
 hdiutil create \
+  -size 40m \
+  -fs HFS+ \
   -volname "$VOL_NAME" \
-  -srcfolder "$STAGE" \
   -ov \
-  -format UDZO \
-  "$DMG_PATH"
+  "$DMG_RW" >/dev/null
 
-echo "==> Cleaning staging directory"
-rm -rf "$STAGE"
+echo "==> Mounting writable DMG"
+hdiutil attach "$DMG_RW" -nobrowse -noverify -noautoopen >/dev/null
+
+echo "==> Populating DMG contents"
+cp -R "$APP_IN_ARCHIVE" "$VOL_MOUNT/AutoRecord.app"
+ln -s /Applications "$VOL_MOUNT/Applications"
+mkdir -p "$VOL_MOUNT/.background"
+cp "$BACKGROUND_SRC" "$VOL_MOUNT/.background/background.png"
+
+echo "==> Setting Finder window properties (AppleScript)"
+osascript <<APPLESCRIPT
+tell application "Finder"
+    tell disk "$VOL_NAME"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {400, 200, 940, 580}
+        set theViewOptions to the icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 100
+        set text size of theViewOptions to 12
+        set background picture of theViewOptions to file ".background:background.png"
+        set position of item "AutoRecord.app" of container window to {160, 220}
+        set position of item "Applications" of container window to {400, 220}
+        update without registering applications
+        delay 1
+        close
+    end tell
+end tell
+APPLESCRIPT
+
+# Make sure Finder's view options have been persisted to .DS_Store.
+sync
+sleep 1
+
+echo "==> Unmounting"
+hdiutil detach "$VOL_MOUNT" >/dev/null
+
+echo "==> Converting to compressed UDZO"
+hdiutil convert "$DMG_RW" -format UDZO -imagekey zlib-level=9 -ov -o "$DMG_PATH" >/dev/null
+
+echo "==> Cleaning up"
+rm -f "$DMG_RW"
 
 echo
 echo "Done. DMG at: $DMG_PATH"
