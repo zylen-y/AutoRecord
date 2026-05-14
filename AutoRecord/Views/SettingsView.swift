@@ -45,7 +45,7 @@ struct SettingsView: View {
                 HStack {
                     Text(micStatusText)
                     Spacer()
-                    if PermissionService.current != .authorized {
+                    if PermissionService.micStatus != .authorized {
                         Button("Open System Settings") {
                             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
                                 NSWorkspace.shared.open(url)
@@ -54,13 +54,36 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section("System Audio (Zoom / other apps)") {
+                HStack {
+                    Text(screenRecordingStatusText)
+                    Spacer()
+                    if !PermissionService.screenRecordingAuthorized {
+                        Button("Open System Settings") {
+                            PermissionService.requestScreenRecordingAccess()
+                        }
+                    }
+                }
+                if !PermissionService.screenRecordingAuthorized {
+                    Text("Without Screen Recording access, only your microphone is recorded.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
     }
 
+    private var screenRecordingStatusText: String {
+        PermissionService.screenRecordingAuthorized
+            ? "Authorized ✓"
+            : "Not authorized — system audio will not be captured"
+    }
+
     private var micStatusText: String {
-        switch PermissionService.current {
+        switch PermissionService.micStatus {
         case .authorized: return "Authorized ✓"
         case .denied: return "Denied — open System Settings to grant access"
         case .notDetermined: return "Not yet requested"

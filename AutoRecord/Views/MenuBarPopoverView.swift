@@ -28,7 +28,7 @@ struct MenuBarPopoverView: View {
                 .foregroundColor(recorder.isRecording ? .red : .secondary)
             Text("AutoRecord").font(.headline)
             Spacer()
-            if PermissionService.current == .denied {
+            if PermissionService.micStatus == .denied {
                 Text("No mic access")
                     .font(.caption)
                     .foregroundColor(.red)
