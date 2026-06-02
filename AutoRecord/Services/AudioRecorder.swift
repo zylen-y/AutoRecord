@@ -37,6 +37,11 @@ final class AudioRecorder: NSObject, ObservableObject {
     private var avRecorder: AVAudioRecorder?
     private var micTempURL: URL?
     private let systemRecorder = SystemAudioRecorder()
+    private weak var scheduleStore: ScheduleStore?
+
+    func attach(store: ScheduleStore) {
+        self.scheduleStore = store
+    }
 
     var outputDirectory: URL {
         get {
@@ -148,12 +153,15 @@ final class AudioRecorder: NSObject, ObservableObject {
     // MARK: - Private
 
     private func commitStop(finalURL: URL) {
+        let endedSchedule = currentSchedule
         avRecorder?.stop()
         avRecorder = nil
         isRecording = false
         currentSchedule = nil
         startedAt = nil
         currentFileURL = nil
+
+        truncateScheduleEnd(endedSchedule)
 
         let micURL = micTempURL
         micTempURL = nil
@@ -166,12 +174,15 @@ final class AudioRecorder: NSObject, ObservableObject {
     }
 
     private func commitDiscard() {
+        let endedSchedule = currentSchedule
         avRecorder?.stop()
         avRecorder = nil
         isRecording = false
         currentSchedule = nil
         startedAt = nil
         currentFileURL = nil
+
+        truncateScheduleEnd(endedSchedule)
 
         let micURL = micTempURL
         micTempURL = nil
@@ -182,6 +193,17 @@ final class AudioRecorder: NSObject, ObservableObject {
             if let micURL { try? FileManager.default.removeItem(at: micURL) }
             if let sysURL { try? FileManager.default.removeItem(at: sysURL) }
         }
+    }
+
+    /// When the user stops a recording before its scheduled end (Save or Discard
+    /// during the window, or after Continue Recording extended past it), persist
+    /// a truncated end so the schedule list flips to "past" instead of staying
+    /// stuck in "active".
+    private func truncateScheduleEnd(_ schedule: Schedule?) {
+        guard let schedule, let store = scheduleStore else { return }
+        var updated = schedule
+        updated.end = max(schedule.start, Date())
+        store.update(updated)
     }
 
     private func finalizeSave(micURL: URL?, sysURL: URL?, finalURL: URL) async {

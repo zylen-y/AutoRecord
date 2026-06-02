@@ -25,6 +25,7 @@ struct AutoRecordApp: App {
                 .frame(width: 320)
                 .onAppear {
                     scheduler.attach(store: store, recorder: recorder)
+                    recorder.attach(store: store)
                 }
         } label: {
             Image(systemName: menuBarIcon)

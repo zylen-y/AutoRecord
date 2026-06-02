@@ -155,9 +155,20 @@ struct ScheduleListView: View {
         .padding(.vertical, 4)
     }
 
+    /// `Schedule.status(now:)` is purely time-based, so it can lie in two cases:
+    /// (a) the user stopped early during the window — schedule's end is the future, but recording is over;
+    /// (b) the user chose Continue Recording past the window — schedule.end is in the past, but recording is still going.
+    /// The recorder's `currentSchedule` is the authoritative override.
+    private func effectiveStatus(for schedule: Schedule) -> Schedule.Status {
+        if recorder.isRecording, recorder.currentSchedule?.id == schedule.id {
+            return .active
+        }
+        return schedule.status(now: now)
+    }
+
     private func statusIndicator(for schedule: Schedule) -> some View {
         let color: Color
-        switch schedule.status(now: now) {
+        switch effectiveStatus(for: schedule) {
         case .upcoming: color = .blue
         case .active: color = .red
         case .past: color = .gray
@@ -167,7 +178,7 @@ struct ScheduleListView: View {
 
     @ViewBuilder
     private func statusBadge(for schedule: Schedule) -> some View {
-        switch schedule.status(now: now) {
+        switch effectiveStatus(for: schedule) {
         case .active:
             Text("RECORDING")
                 .font(.caption2.bold())
