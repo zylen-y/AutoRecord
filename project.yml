@@ -51,8 +51,8 @@ targets:
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         NSHighResolutionCapable: true
         NSMicrophoneUsageDescription: "AutoRecord records audio during your scheduled meetings."
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.1.0"
+        CFBundleVersion: "2"
     preBuildScripts:
       - name: "Build autorecord-mcp"
         script: |
