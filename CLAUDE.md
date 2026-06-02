@@ -76,7 +76,12 @@ swift test
 
 `Packages/AutoRecordShared/` likewise has its own `swift test` suite.
 
-**One-click install:** Settings → MCP for Claude runs `MCPInstallService.installOrUpdate()`, which merges an `mcpServers.autorecord` entry pointing at the embedded binary into `~/Library/Application Support/Claude/claude_desktop_config.json`. The merge preserves every other top-level key and other server entries (atomic write via `replaceItemAt`). `MCPInstallService.currentStatus()` distinguishes `installedCurrent` from `installedStale` (path no longer matches this bundle — e.g., app moved) so the UI can offer "Update" vs "Install".
+**One-click install (two clients):** `MCPInstallService` is a value type parameterized by `(configURL, serverKey, clientName)`. Two preconfigured static instances ship:
+
+- `MCPInstallService.claudeDesktop` → `~/Library/Application Support/Claude/claude_desktop_config.json`
+- `MCPInstallService.claudeCode` → `~/.claude.json`
+
+Settings has a section per client; each shows its own status and an Install/Reinstall/Update button. The merge logic is identical for both: read existing JSON, add or replace `mcpServers.<serverKey>`, write atomically via `replaceItemAt`. Every other top-level key and every other server entry is preserved — critical for `~/.claude.json`, which is large (~120 KB on a real user's machine) and holds Claude Code's own settings. `currentStatus()` distinguishes `installedCurrent` from `installedStale` (path no longer matches this bundle — e.g., app moved) so the UI can offer "Update" vs "Install".
 
 ### Distribution (DMG + GitHub Releases)
 
