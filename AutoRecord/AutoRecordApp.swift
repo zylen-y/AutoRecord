@@ -10,6 +10,13 @@ struct AutoRecordApp: App {
     @StateObject private var scheduler = SchedulerService()
 
     var body: some Scene {
+        WindowGroup(id: "main") {
+            ScheduleListView()
+                .environmentObject(store)
+                .environmentObject(recorder)
+                .frame(minWidth: 480, minHeight: 360)
+        }
+
         MenuBarExtra {
             MenuBarPopoverView()
                 .environmentObject(store)
@@ -24,13 +31,6 @@ struct AutoRecordApp: App {
                 .symbolRenderingMode(.hierarchical)
         }
         .menuBarExtraStyle(.window)
-
-        Window("AutoRecord — Schedules", id: "schedules") {
-            ScheduleListView()
-                .environmentObject(store)
-                .environmentObject(recorder)
-                .frame(minWidth: 480, minHeight: 360)
-        }
 
         Settings {
             SettingsView()
