@@ -1,7 +1,10 @@
 import SwiftUI
+import AppKit
 
 @main
 struct AutoRecordApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     @StateObject private var store = ScheduleStore()
     @StateObject private var recorder = AudioRecorder()
     @StateObject private var scheduler = SchedulerService()
@@ -41,5 +44,15 @@ struct AutoRecordApp: App {
         if recorder.isRecording { return "record.circle.fill" }
         if PermissionService.micStatus == .denied { return "mic.slash" }
         return "mic"
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        true
     }
 }
