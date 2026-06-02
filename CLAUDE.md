@@ -25,7 +25,7 @@ The MCP package (`Packages/AutoRecordMCP/`) and the shared package (`Packages/Au
 
 ## Architecture
 
-Menu-bar-only app (`LSUIElement: true`, no Dock icon). Three scenes in `AutoRecordApp.swift`: `MenuBarExtra` popover, an explicit `Window("schedules")` manager, and `Settings`. Three `@StateObject`s — `ScheduleStore`, `AudioRecorder`, `SchedulerService` — are created once and injected via `.environmentObject` into every scene. `SchedulerService.attach(store:recorder:)` wires them together on first appear.
+Hybrid Dock + menu-bar app. Three scenes in `AutoRecordApp.swift`: a main `WindowGroup(id: "main")` that hosts `ScheduleListView` (opens on launch), a `MenuBarExtra` popover for at-a-glance recording state, and `Settings`. An `NSApplicationDelegateAdaptor(AppDelegate.self)` returns `false` from `applicationShouldTerminateAfterLastWindowClosed` so the scheduler keeps firing when the main window is closed, and `true` from `applicationShouldHandleReopen` so clicking the Dock icon brings the window back. Three `@StateObject`s — `ScheduleStore`, `AudioRecorder`, `SchedulerService` — are created once and injected via `.environmentObject` into every scene. `SchedulerService.attach(store:recorder:)` wires them together on first appear.
 
 ### Two-track audio capture (the non-obvious part)
 
@@ -40,6 +40,8 @@ System audio capture requires **Screen Recording** permission (Apple gates Scree
 ### Scheduler
 
 `SchedulerService` arms one-shot `Timer`s for each schedule's start and end. It subscribes to `ScheduleStore.$schedules` via Combine and **rebuilds all timers from scratch** on any change. On rebuild, schedules whose window already encloses `now` are started immediately (covers app launch mid-window). **Known limitation:** `Timer` does not fire while the Mac is asleep — recordings starting during sleep will be late or skipped. Don't add workarounds without discussing scope.
+
+Closing the main window does **not** stop the scheduler — `AppDelegate.applicationShouldTerminateAfterLastWindowClosed` returns `false`, so the process stays alive in the Dock and the menu bar and timers continue firing. The user must explicitly Quit (popover button, Dock right-click, or ⌘Q) to stop scheduled recordings.
 
 ### End-of-window UX
 
