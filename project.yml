@@ -48,7 +48,6 @@ targets:
     info:
       path: AutoRecord/Resources/Info.plist
       properties:
-        LSUIElement: true
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         NSHighResolutionCapable: true
         NSMicrophoneUsageDescription: "AutoRecord records audio during your scheduled meetings."
