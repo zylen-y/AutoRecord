@@ -90,7 +90,7 @@ struct MenuBarPopoverView: View {
     private var buttons: some View {
         VStack(spacing: 6) {
             Button {
-                openWindow(id: "schedules")
+                openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
                 Label("Open Manager…", systemImage: "calendar")
