@@ -74,7 +74,13 @@ swift test
 
 `Packages/AutoRecordShared/` likewise has its own `swift test` suite.
 
-Configuration snippet shown in **Settings → MCP for Claude**; users paste it into `~/Library/Application Support/Claude/claude_desktop_config.json`.
+**One-click install:** Settings → MCP for Claude runs `MCPInstallService.installOrUpdate()`, which merges an `mcpServers.autorecord` entry pointing at the embedded binary into `~/Library/Application Support/Claude/claude_desktop_config.json`. The merge preserves every other top-level key and other server entries (atomic write via `replaceItemAt`). `MCPInstallService.currentStatus()` distinguishes `installedCurrent` from `installedStale` (path no longer matches this bundle — e.g., app moved) so the UI can offer "Update" vs "Install".
+
+### Distribution (DMG + GitHub Releases)
+
+Public releases live at https://github.com/zylen-y/AutoRecord (current: [v1.0.0](https://github.com/zylen-y/AutoRecord/releases/tag/v1.0.0)). Users download `AutoRecord.dmg` from the Releases page — that DMG is what end-users see, so the Finder layout and bundled `autorecord-mcp` matter.
+
+`scripts/build-dmg.sh` produces `dist/AutoRecord.dmg`. It archives a Release build (`xcodebuild archive` — which runs the `autorecord-mcp` preBuildScript), copies the `.app` into a writable HFS+ image alongside an `/Applications` symlink and a `.background/background.png`, then drives Finder via AppleScript to set window bounds, icon positions, and the background image. `sync` + `sleep` are deliberate: `.DS_Store` must flush before `hdiutil detach`, or the layout will be lost when the DMG is reopened. Final step converts to compressed UDZO. The script asserts that `autorecord-mcp` is embedded in the archived bundle before packaging — don't remove that check. `scripts/generate-app-icon.sh` regenerates the `AppIcon` asset catalog from a source image.
 
 ### Sandbox & entitlements
 
