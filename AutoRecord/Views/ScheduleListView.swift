@@ -8,15 +8,18 @@ struct ScheduleListView: View {
     @State private var showingNew = false
     @State private var now = Date()
 
-    private let ticker = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.schedules.isEmpty {
-                    emptyState
-                } else {
-                    list
+            VStack(spacing: 0) {
+                recordingBanner
+                Group {
+                    if store.schedules.isEmpty {
+                        emptyState
+                    } else {
+                        list
+                    }
                 }
             }
             .navigationTitle("Schedules")
@@ -64,6 +67,54 @@ struct ScheduleListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+
+    @ViewBuilder
+    private var recordingBanner: some View {
+        if recorder.isRecording,
+           let schedule = recorder.currentSchedule,
+           let startedAt = recorder.startedAt {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 10, height: 10)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Recording — \(schedule.title)")
+                        .font(.subheadline.bold())
+                    Text("Elapsed \(formatElapsed(now.timeIntervalSince(startedAt)))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    recorder.stopAndPrompt()
+                } label: {
+                    Label("Stop", systemImage: "stop.circle")
+                }
+                .controlSize(.regular)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.red.opacity(0.10))
+            .overlay(
+                Rectangle()
+                    .fill(Color.red.opacity(0.30))
+                    .frame(height: 1),
+                alignment: .bottom
+            )
+        }
+    }
+
+    private func formatElapsed(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%d:%02d", m, s)
     }
 
     private var list: some View {
