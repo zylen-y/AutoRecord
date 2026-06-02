@@ -1,18 +1,32 @@
 import Foundation
 
-/// Reads and writes Claude Desktop's `claude_desktop_config.json` to register
-/// this app's bundled `autorecord-mcp` binary as an MCP server, without disturbing
-/// any other keys the user already has in the file.
-enum MCPInstallService {
-    static let claudeConfigURL: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("Claude/claude_desktop_config.json")
-    }()
+/// Reads and writes an MCP client's config JSON to register this app's bundled
+/// `autorecord-mcp` binary as a server, without disturbing any other keys the
+/// user already has. Supports multiple MCP clients via preconfigured static
+/// instances (see `claudeDesktop`, `claudeCode`).
+struct MCPInstallService {
+    let configURL: URL
+    let serverKey: String
+    let clientName: String
 
-    static let serverKey = "autorecord"
+    static let claudeDesktop = MCPInstallService(
+        configURL: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Claude/claude_desktop_config.json"),
+        serverKey: "autorecord",
+        clientName: "Claude Desktop"
+    )
+
+    static let claudeCode = MCPInstallService(
+        configURL: FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude.json"),
+        serverKey: "autorecord",
+        clientName: "Claude Code"
+    )
 
     enum InstallStatus: Equatable {
-        case claudeConfigMissing
+        case configMissing
         case notInstalled
         case installedCurrent
         case installedStale(existingPath: String)
@@ -31,15 +45,15 @@ enum MCPInstallService {
     }
 
     /// Inspects the current state without modifying anything.
-    static func currentStatus() -> InstallStatus {
-        guard FileManager.default.fileExists(atPath: claudeConfigURL.path) else {
-            return .claudeConfigMissing
+    func currentStatus() -> InstallStatus {
+        guard FileManager.default.fileExists(atPath: configURL.path) else {
+            return .configMissing
         }
-        guard let desired = bundleBinaryPath else {
+        guard let desired = Self.bundleBinaryPath else {
             return .readError("Bundle resource URL unavailable")
         }
         do {
-            let data = try Data(contentsOf: claudeConfigURL)
+            let data = try Data(contentsOf: configURL)
             guard !data.isEmpty,
                   let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return .notInstalled
@@ -55,19 +69,19 @@ enum MCPInstallService {
         }
     }
 
-    /// Adds or updates the `mcpServers.autorecord` entry to point at the current
-    /// bundle. Preserves every other top-level key and every other server entry.
+    /// Adds or updates `mcpServers.<serverKey>` to point at the current bundle.
+    /// Preserves every other top-level key and every other server entry.
     /// Creates the file (and its parent directory) if missing.
-    static func installOrUpdate() throws {
-        guard let desired = bundleBinaryPath else {
+    func installOrUpdate() throws {
+        guard let desired = Self.bundleBinaryPath else {
             throw InstallError.bundleResourceMissing
         }
 
         var root: [String: Any]
-        if FileManager.default.fileExists(atPath: claudeConfigURL.path) {
+        if FileManager.default.fileExists(atPath: configURL.path) {
             let data: Data
             do {
-                data = try Data(contentsOf: claudeConfigURL)
+                data = try Data(contentsOf: configURL)
             } catch {
                 throw InstallError.readFailed(String(describing: error))
             }
@@ -88,7 +102,7 @@ enum MCPInstallService {
         servers[serverKey] = ["command": desired]
         root["mcpServers"] = servers
 
-        let parent = claudeConfigURL.deletingLastPathComponent()
+        let parent = configURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
 
         do {
@@ -96,9 +110,9 @@ enum MCPInstallService {
                 withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys]
             )
-            let tmp = claudeConfigURL.appendingPathExtension("tmp")
+            let tmp = configURL.appendingPathExtension("tmp")
             try out.write(to: tmp, options: .atomic)
-            _ = try FileManager.default.replaceItemAt(claudeConfigURL, withItemAt: tmp)
+            _ = try FileManager.default.replaceItemAt(configURL, withItemAt: tmp)
         } catch {
             throw InstallError.writeFailed(String(describing: error))
         }
